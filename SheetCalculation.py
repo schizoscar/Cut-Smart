@@ -438,6 +438,13 @@ def generate_pdf(all_layouts):
 class SheetCalculationApp:
     def __init__(self, root):
         self.root = root
+        # Set window icon/logo
+        try:
+            self.root.iconbitmap("logo.png")  
+
+        except:
+            print("Logo file not found, running without logo")
+
         apply_global_styles(root)
         self.parts = []
         self.current_index = 0
@@ -1078,96 +1085,131 @@ class SheetCalculationApp:
             pdf.output(filename)
             messagebox.showinfo("Save Complete", f"Layout saved as {filename}")
 
-    def _create_save_function(self, total_pages, needed_sheets, drawings_per_page, sheet_w, sheet_h, 
-                            width, height, thickness, qty, across, down, wastage_area, title, 
-                            parts=None, layouts=None, is_mixed=False):
+    def _create_save_function(self, total_pages, needed_sheets, drawings_per_page, sheet_w, sheet_h,
+                              width, height, thickness, qty, across, down, wastage_area, title,
+                              parts=None, layouts=None, is_mixed=False):
         """Create a unified save function for both individual and mixed layouts"""
         def save_current_layout():
             from tkinter import filedialog
             import os
-    
+
             filename = filedialog.asksaveasfilename(
                 defaultextension=".pdf",
                 filetypes=[("PDF files", "*.pdf"), ("All files", "*.*")],
                 initialfile="SheetCalculation.pdf",
                 title="Save PDF As"
             )
-    
+
             if not filename:
                 return
-    
-            # Create PDF with all sheets
+
+            # Create landscape A4 PDF
             pdf = FPDF("L", "mm", "A4")
             pdf.set_auto_page_break(auto=False)
-    
+
+            # Define A4 dimensions in mm
+            a4_w, a4_h = 297, 210
+            a4_aspect = a4_w / a4_h
+
             for page_idx in range(total_pages):
                 pdf.add_page()
-        
-                # Calculate sheets for this PDF page
-                start_sheet_pdf = page_idx * drawings_per_page
-                end_sheet_pdf = min((page_idx + 1) * drawings_per_page, needed_sheets)
-                sheets_on_pdf_page = end_sheet_pdf - start_sheet_pdf
-        
-                # Create figure
-                if sheets_on_pdf_page == 1:
-                    pdf_fig, pdf_axes = plt.subplots(1, 1, figsize=(11.69, 8.27))
-                    pdf_axes_flat = [pdf_axes]
-                elif sheets_on_pdf_page == 2:
-                    pdf_fig, pdf_axes = plt.subplots(1, 2, figsize=(11.69, 5))
-                    pdf_axes_flat = [pdf_axes[0], pdf_axes[1]]
+
+                # Determine how many sheets fit on this page
+                start_sheet = page_idx * drawings_per_page
+                end_sheet = min((page_idx + 1) * drawings_per_page, needed_sheets)
+                count_on_page = end_sheet - start_sheet
+
+                # Sheet aspect ratio
+                sheet_aspect = sheet_w / sheet_h
+
+                # Auto-fit layout depending on count
+                if count_on_page == 1:
+                    rows, cols = 1, 1
+                elif count_on_page == 2:
+                    rows, cols = 1, 2
                 else:
-                    pdf_fig, pdf_axes = plt.subplots(2, 2, figsize=(11.69, 8.27))
-                    pdf_axes_flat = pdf_axes.flatten()
-        
+                    rows, cols = 2, 2
+
+                # Determine subplot figure size maintaining sheet proportions
+                fig_w_in = 11.69  # 297 mm / 25.4
+                fig_h_in = 8.27   # 210 mm / 25.4
+                pdf_fig, pdf_axes = plt.subplots(rows, cols, figsize=(fig_w_in, fig_h_in))
+
+                # Flatten axes for easier iteration
+                if count_on_page > 1:
+                    pdf_axes = pdf_axes.flatten()
+                else:
+                    pdf_axes = [pdf_axes]
+
+                # Title text
                 if is_mixed:
-                    # Mixed parts title
                     parts_info = " + ".join([f"{w}×{h}×{t}mm-{q}nos" for w, h, t, q in parts])
                     part_title = f"Mixed Parts: {parts_info}"
                 else:
-                    # Individual part title
-                    part_title = f"{width}×{height}×{thickness}mm-{qty}nos | Total Wastage: {int(wastage_area)} mm²"
-                
-                if total_pages > 1:
-                    pdf_title = f"{part_title} - Page {page_idx+1} of {total_pages}"
-                else:
-                    pdf_title = part_title
-        
-                pdf_fig.suptitle(pdf_title, fontsize=12)
-        
-                # Draw sheets
-                for i, sheet_num in enumerate(range(start_sheet_pdf, end_sheet_pdf)):
-                    ax = pdf_axes_flat[i]
+                    part_title = f"{width}×{height}×{thickness}mm - {qty}nos | Total Wastage: {int(wastage_area)} mm²"
+
+                pdf_fig.suptitle(part_title, fontsize=10)
+
+                # Draw each sheet
+                for i, sheet_num in enumerate(range(start_sheet, end_sheet)):
+                    ax = pdf_axes[i]
+                    ax.set_aspect('equal')
+
+                    # Define padding to match screen view
+                    x_pad = sheet_w * 0.05
+                    y_pad = sheet_h * 0.10
+
+                    ax.set_xlim(-x_pad, sheet_w + x_pad)
+                    ax.set_ylim(-y_pad, sheet_h + y_pad)
+
                     if is_mixed:
                         if sheet_num < len(layouts):
-                            self._draw_single_mixed_sheet(ax, layouts[sheet_num], sheet_num, needed_sheets, sheet_w, sheet_h, parts)
+                            layout = layouts[sheet_num]
+                            self._draw_single_mixed_sheet(ax, layout, sheet_num, needed_sheets, sheet_w, sheet_h, parts)
                     else:
-                        self._draw_single_sheet(ax, sheet_w, sheet_h, width, height, thickness, across, down, 
-                                              qty, sheet_num, needed_sheets, wastage_area)
-        
+                        self._draw_single_sheet(ax, sheet_w, sheet_h, width, height, thickness,
+                                                across, down, qty, sheet_num, needed_sheets, wastage_area)
+
                 # Hide unused subplots
-                for i in range(sheets_on_pdf_page, len(pdf_axes_flat)):
-                    pdf_axes_flat[i].set_visible(False)
-        
-                plt.tight_layout(rect=[0, 0.02, 1, 0.96])
-        
-                # Save the figure as a temporary PNG
+                for j in range(len(pdf_axes)):
+                    if j >= count_on_page:
+                        pdf_axes[j].set_visible(False)
+
+                plt.tight_layout(rect=[0, 0, 1, 0.95], pad=2.0)
+
+                # Save as PNG at correct DPI (ensures visual match)
                 temp_png = f"temp_page_{page_idx}.png"
-                pdf_fig.savefig(temp_png, dpi=150, bbox_inches='tight', format='png')
+                pdf_fig.savefig(temp_png, dpi=200, bbox_inches='tight', facecolor='white')
                 plt.close(pdf_fig)
-        
-                # Add PNG image to PDF
-                pdf.image(temp_png, x=0, y=0, w=297, h=210)
-        
-                # Clean up
-                try:
-                    os.remove(temp_png)
-                except:
-                    pass
-    
+
+                # Load PNG dimensions to preserve ratio
+                from PIL import Image
+                img = Image.open(temp_png)
+                img_w, img_h = img.size
+                img_aspect = img_w / img_h
+
+                # Compute correct PDF placement to avoid stretch
+                if img_aspect >= a4_aspect:
+                    w_mm = a4_w - 10
+                    h_mm = w_mm / img_aspect
+                    x = 5
+                    y = (a4_h - h_mm) / 2
+                else:
+                    h_mm = a4_h - 10
+                    w_mm = h_mm * img_aspect
+                    y = 5
+                    x = (a4_w - w_mm) / 2
+
+                pdf.image(temp_png, x=x, y=y, w=w_mm, h=h_mm)
+                img.close()
+
+                os.remove(temp_png)
+
             pdf.output(filename)
             messagebox.showinfo("Save Complete", f"All {needed_sheets} sheet(s) saved as {filename}")
-        
+
         return save_current_layout
+
 
     def _draw_single_sheet(self, ax, sheet_w, sheet_h, width, height, thickness, across, down, 
                           qty, sheet_num, needed_sheets, wastage_area):
