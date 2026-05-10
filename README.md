@@ -22,7 +22,9 @@ Instead of manual calculations and guesswork, this tool automatically calculates
 
 The application supports both single-part and mixed-part optimization, providing visual layouts and exportable PDF reports for production planning.
 
----
+<p align="center">
+  <img src="assets/DemoCalculation.png" alt="Cut Smart Logo" width="700"/>
+</p>
 
 ## Key Features
 
