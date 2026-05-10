@@ -179,4 +179,4 @@ docs/_build/
 
 # Local development overrides
 *.local.py
-local_settings.py".vs/" 
+.vs/
